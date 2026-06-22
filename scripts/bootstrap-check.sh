@@ -26,7 +26,6 @@ internal/runtime
 internal/policy
 internal/credential
 internal/observability
-pkg
 docs/proposals
 .codex/skills/toolvault-bootstrap-orchestrator
 .codex/skills/toolvault-module-builder
@@ -49,10 +48,23 @@ for dir in $required_dirs; do
   }
 done
 
-if find internal cmd pkg -type f \( -name '*.go' -o -name '*.sql' -o -name '*.proto' \) | grep -q .; then
-  echo "M0 must not contain business implementation files under internal, cmd, or pkg" >&2
-  exit 1
-fi
+for inactive_dir in \
+  cmd/toolvault \
+  internal/gateway \
+  internal/runtime \
+  internal/policy \
+  internal/credential \
+  internal/protocol \
+  internal/observability \
+  pkg
+do
+  if test -d "$inactive_dir"; then
+    if find "$inactive_dir" -type f \( -name '*.go' -o -name '*.sql' -o -name '*.proto' \) | grep -q .; then
+      echo "unexpected implementation files under inactive path: $inactive_dir" >&2
+      exit 1
+    fi
+  fi
+done
 
 if find . -path './.git' -prune -o -path './.codex' -prune -o -type f \( -name 'package.json' -o -name 'go.sum' \) -print | grep -q .; then
   echo "unexpected dependency manifest or lock file for M0" >&2

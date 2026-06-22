@@ -1,8 +1,8 @@
-# M0 Bootstrap Acceptance Checklist
+# Bootstrap Health Check
 
-This checklist mirrors `scripts/bootstrap-check.sh`. The final M0 gate is
-`make bootstrap-check`; if this document and the script ever disagree, update
-the document or script before accepting M0.
+This checklist mirrors `scripts/bootstrap-check.sh`. After M0, the check is a
+foundation health gate used by `make verify`; if this document and the script
+ever disagree, update the document or script before accepting changes.
 
 ## Required Files
 
@@ -30,7 +30,6 @@ the document or script before accepting M0.
 - [ ] `internal/policy/`
 - [ ] `internal/credential/`
 - [ ] `internal/observability/`
-- [ ] `pkg/`
 - [ ] `docs/proposals/`
 - [ ] `.codex/skills/toolvault-bootstrap-orchestrator/`
 - [ ] `.codex/skills/toolvault-module-builder/`
@@ -40,13 +39,16 @@ the document or script before accepting M0.
 
 ## Required Constraints
 
-- [ ] No `.go`, `.sql`, or `.proto` files under `internal/`, `cmd/`, or `pkg/`.
-- [ ] No Registry business logic.
+- [ ] No `.go`, `.sql`, or `.proto` files under inactive implementation paths.
+- [ ] No implementation files under `cmd/toolvault/`.
 - [ ] No Gateway business logic.
 - [ ] No Runtime Manager business logic.
 - [ ] No Policy Engine business logic.
 - [ ] No Credential Vault business logic.
 - [ ] No Observability business logic.
+- [ ] No implementation files under `pkg/` if that directory exists.
+- [ ] Registry implementation files are allowed only as covered by the active M1
+      Registry task checks.
 - [ ] No `package.json`.
 - [ ] No `go.sum`.
 - [ ] No unapproved third-party dependency.
