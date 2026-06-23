@@ -11,10 +11,16 @@ import (
 type Registry interface {
 	Register(context.Context, RegisterRequest) (spec.ToolSpec, error)
 	Get(context.Context, GetRequest) (spec.ToolSpec, error)
+	// List returns all non-deleted tools by default, including disabled and
+	// deprecated tools. Implementations should return stable results.
 	List(context.Context, ListRequest) ([]spec.ToolSpec, error)
+	// Update replaces M1 mutable metadata fields after an expected-version
+	// check. Successful updates must store a new opaque ToolSpec version.
 	Update(context.Context, UpdateRequest) (spec.ToolSpec, error)
 	// Delete is an M1 hard delete. Lifecycle changes belong in SetStatus.
 	Delete(context.Context, DeleteRequest) error
+	// SetStatus applies Registry-owned lifecycle transitions and preserves the
+	// ToolSpec version because status is not the tool definition version.
 	SetStatus(context.Context, SetStatusRequest) (spec.ToolSpec, error)
 }
 
@@ -87,13 +93,19 @@ type UpdateRequest struct {
 type ToolSpecUpdate struct {
 	DisplayName string
 	Description string
-	Version     string
-	Tags        []string
-	Actions     []spec.ToolAction
-	Metadata    map[string]string
+	// Version is the caller-provided next opaque tool definition version.
+	// It must be non-empty and differ from the current stored version.
+	Version  string
+	Tags     []string
+	Actions  []spec.ToolAction
+	Metadata map[string]string
 }
 
-type UpdateOptions struct{}
+type UpdateOptions struct {
+	// ExpectedVersion is required for M1 optimistic update checks.
+	// It must match the currently stored opaque ToolSpec version.
+	ExpectedVersion string
+}
 
 func DefaultUpdateOptions() UpdateOptions {
 	return UpdateOptions{}

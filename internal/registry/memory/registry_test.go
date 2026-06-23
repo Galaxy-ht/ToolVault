@@ -59,6 +59,20 @@ func TestRegisterDuplicate(t *testing.T) {
 	}
 }
 
+func TestRegisterDuplicateName(t *testing.T) {
+	store := New()
+	tool := validToolSpec("tool-search")
+	mustRegister(t, store, tool)
+
+	duplicateName := validToolSpec("tool-search-copy")
+	duplicateName.Name = tool.Name
+
+	_, err := store.Register(context.Background(), registry.RegisterRequest{Spec: duplicateName})
+	if !errors.Is(err, registry.AlreadyExists) {
+		t.Fatalf("Register() error = %v, want %v", err, registry.AlreadyExists)
+	}
+}
+
 func TestRegisterInvalidSpec(t *testing.T) {
 	store := New()
 	tool := validToolSpec("tool-search")
@@ -196,6 +210,7 @@ func TestUpdateSuccess(t *testing.T) {
 			},
 			Metadata: map[string]string{"owner": "platform", "tier": "dev"},
 		},
+		Options: registry.UpdateOptions{ExpectedVersion: registered.Version},
 	})
 	if err != nil {
 		t.Fatalf("Update() error = %v, want nil", err)
@@ -208,12 +223,56 @@ func TestUpdateSuccess(t *testing.T) {
 	}
 }
 
+func TestUpdateRejectsMissingExpectedVersion(t *testing.T) {
+	store := New()
+	registered := mustRegister(t, store, validToolSpec("tool-search"))
+
+	_, err := store.Update(context.Background(), registry.UpdateRequest{
+		ID:     registered.ID,
+		Update: validUpdate(),
+	})
+	if !errors.Is(err, registry.InvalidSpec) {
+		t.Fatalf("Update() error = %v, want %v", err, registry.InvalidSpec)
+	}
+}
+
+func TestUpdateVersionConflict(t *testing.T) {
+	store := New()
+	registered := mustRegister(t, store, validToolSpec("tool-search"))
+
+	_, err := store.Update(context.Background(), registry.UpdateRequest{
+		ID:      registered.ID,
+		Update:  validUpdate(),
+		Options: registry.UpdateOptions{ExpectedVersion: "0.9.0"},
+	})
+	if !errors.Is(err, registry.VersionConflict) {
+		t.Fatalf("Update() error = %v, want %v", err, registry.VersionConflict)
+	}
+}
+
+func TestUpdateRequiresVersionBump(t *testing.T) {
+	store := New()
+	registered := mustRegister(t, store, validToolSpec("tool-search"))
+	update := validUpdate()
+	update.Version = registered.Version
+
+	_, err := store.Update(context.Background(), registry.UpdateRequest{
+		ID:      registered.ID,
+		Update:  update,
+		Options: registry.UpdateOptions{ExpectedVersion: registered.Version},
+	})
+	if !errors.Is(err, registry.InvalidSpec) {
+		t.Fatalf("Update() error = %v, want %v", err, registry.InvalidSpec)
+	}
+}
+
 func TestUpdateNotFound(t *testing.T) {
 	store := New()
 
 	_, err := store.Update(context.Background(), registry.UpdateRequest{
-		ID:     "missing",
-		Update: validUpdate(),
+		ID:      "missing",
+		Update:  validUpdate(),
+		Options: registry.UpdateOptions{ExpectedVersion: "1.0.0"},
 	})
 	if !errors.Is(err, registry.NotFound) {
 		t.Fatalf("Update() error = %v, want %v", err, registry.NotFound)
@@ -227,8 +286,9 @@ func TestUpdateInvalidSpec(t *testing.T) {
 	update.Version = "2.0 beta"
 
 	_, err := store.Update(context.Background(), registry.UpdateRequest{
-		ID:     registered.ID,
-		Update: update,
+		ID:      registered.ID,
+		Update:  update,
+		Options: registry.UpdateOptions{ExpectedVersion: registered.Version},
 	})
 	if !errors.Is(err, registry.InvalidSpec) {
 		t.Fatalf("Update() error = %v, want %v", err, registry.InvalidSpec)
@@ -246,6 +306,14 @@ func TestDeleteSuccess(t *testing.T) {
 	_, err := store.Get(context.Background(), registry.GetRequest{ID: registered.ID})
 	if !errors.Is(err, registry.NotFound) {
 		t.Fatalf("Get() after Delete() error = %v, want %v", err, registry.NotFound)
+	}
+
+	listed, err := store.List(context.Background(), registry.ListRequest{})
+	if err != nil {
+		t.Fatalf("List() after Delete() error = %v, want nil", err)
+	}
+	if len(listed) != 0 {
+		t.Fatalf("List() after Delete() len = %d, want 0", len(listed))
 	}
 }
 
@@ -265,6 +333,33 @@ func TestSetStatusSuccess(t *testing.T) {
 	got := mustSetStatus(t, store, registered.ID, spec.ToolStatusActive)
 	if got.Status != spec.ToolStatusActive {
 		t.Fatalf("SetStatus() status = %q, want %q", got.Status, spec.ToolStatusActive)
+	}
+	if got.Version != registered.Version {
+		t.Fatalf("SetStatus() version = %q, want preserved version %q", got.Version, registered.Version)
+	}
+}
+
+func TestSetStatusValidTransitions(t *testing.T) {
+	store := New()
+
+	draftToDisabled := mustRegister(t, store, validToolSpec("tool-draft-disabled"))
+	got := mustSetStatus(t, store, draftToDisabled.ID, spec.ToolStatusDisabled)
+	if got.Status != spec.ToolStatusDisabled {
+		t.Fatalf("SetStatus() status = %q, want %q", got.Status, spec.ToolStatusDisabled)
+	}
+
+	draftToDeprecated := mustRegister(t, store, validToolSpec("tool-draft-deprecated"))
+	got = mustSetStatus(t, store, draftToDeprecated.ID, spec.ToolStatusActive)
+	if got.Status != spec.ToolStatusActive {
+		t.Fatalf("SetStatus() status = %q, want %q", got.Status, spec.ToolStatusActive)
+	}
+	got = mustSetStatus(t, store, draftToDeprecated.ID, spec.ToolStatusDeprecated)
+	if got.Status != spec.ToolStatusDeprecated {
+		t.Fatalf("SetStatus() status = %q, want %q", got.Status, spec.ToolStatusDeprecated)
+	}
+	got = mustSetStatus(t, store, draftToDeprecated.ID, spec.ToolStatusDisabled)
+	if got.Status != spec.ToolStatusDisabled {
+		t.Fatalf("SetStatus() status = %q, want %q", got.Status, spec.ToolStatusDisabled)
 	}
 }
 
@@ -304,6 +399,36 @@ func TestSetStatusRejectsInvalidStatus(t *testing.T) {
 	})
 	if !errors.Is(err, registry.InvalidSpec) {
 		t.Fatalf("SetStatus() error = %v, want %v", err, registry.InvalidSpec)
+	}
+}
+
+func TestGetAndListIncludeDisabledAndDeprecated(t *testing.T) {
+	store := New()
+	disabled := mustRegister(t, store, validToolSpec("tool-disabled"))
+	deprecated := mustRegister(t, store, validToolSpec("tool-deprecated"))
+
+	mustSetStatus(t, store, disabled.ID, spec.ToolStatusDisabled)
+	mustSetStatus(t, store, deprecated.ID, spec.ToolStatusActive)
+	mustSetStatus(t, store, deprecated.ID, spec.ToolStatusDeprecated)
+
+	for _, id := range []spec.ToolID{disabled.ID, deprecated.ID} {
+		if _, err := store.Get(context.Background(), registry.GetRequest{ID: id}); err != nil {
+			t.Fatalf("Get(%q) error = %v, want nil", id, err)
+		}
+	}
+
+	got, err := store.List(context.Background(), registry.ListRequest{})
+	if err != nil {
+		t.Fatalf("List() error = %v, want nil", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("List() len = %d, want 2", len(got))
+	}
+	if got[0].ID != deprecated.ID || got[0].Status != spec.ToolStatusDeprecated {
+		t.Fatalf("List()[0] = %#v, want deprecated tool sorted by ID", got[0])
+	}
+	if got[1].ID != disabled.ID || got[1].Status != spec.ToolStatusDisabled {
+		t.Fatalf("List()[1] = %#v, want disabled tool sorted by ID", got[1])
 	}
 }
 
