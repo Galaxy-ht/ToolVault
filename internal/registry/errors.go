@@ -13,6 +13,7 @@ const (
 	NotFound               ErrorKind = "not_found"
 	InvalidSpec            ErrorKind = "invalid_spec"
 	InvalidStateTransition ErrorKind = "invalid_state_transition"
+	VersionConflict        ErrorKind = "version_conflict"
 )
 
 func (k ErrorKind) Error() string {

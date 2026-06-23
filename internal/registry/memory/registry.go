@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -46,6 +47,16 @@ func (r *Registry) Register(_ context.Context, req registry.RegisterRequest) (sp
 	}
 	if _, ok := r.tools[tool.ID]; ok {
 		return spec.ToolSpec{}, registry.NewError(registry.AlreadyExists, opRegister, tool.ID, nil)
+	}
+	for _, current := range r.tools {
+		if current.Name == tool.Name {
+			return spec.ToolSpec{}, registry.NewError(
+				registry.AlreadyExists,
+				opRegister,
+				tool.ID,
+				fmt.Errorf("name %q is already registered by tool %q", tool.Name, current.ID),
+			)
+		}
 	}
 
 	r.tools[tool.ID] = cloneToolSpec(tool)
@@ -95,6 +106,30 @@ func (r *Registry) Update(_ context.Context, req registry.UpdateRequest) (spec.T
 	current, ok := r.tools[req.ID]
 	if !ok {
 		return spec.ToolSpec{}, registry.NewError(registry.NotFound, opUpdate, req.ID, nil)
+	}
+	if req.Options.ExpectedVersion == "" {
+		return spec.ToolSpec{}, registry.NewError(
+			registry.InvalidSpec,
+			opUpdate,
+			req.ID,
+			fmt.Errorf("expected version is required"),
+		)
+	}
+	if req.Options.ExpectedVersion != current.Version {
+		return spec.ToolSpec{}, registry.NewError(
+			registry.VersionConflict,
+			opUpdate,
+			req.ID,
+			fmt.Errorf("expected version %q does not match current version %q", req.Options.ExpectedVersion, current.Version),
+		)
+	}
+	if req.Update.Version == current.Version {
+		return spec.ToolSpec{}, registry.NewError(
+			registry.InvalidSpec,
+			opUpdate,
+			req.ID,
+			fmt.Errorf("update version must differ from current version %q", current.Version),
+		)
 	}
 
 	updated := cloneToolSpec(current)

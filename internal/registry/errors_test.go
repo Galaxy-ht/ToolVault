@@ -10,18 +10,28 @@ import (
 )
 
 func TestErrorKindIsRecognizable(t *testing.T) {
-	err := NewError(AlreadyExists, "registry.register", "tool-search", nil)
+	for _, want := range []ErrorKind{
+		AlreadyExists,
+		NotFound,
+		InvalidSpec,
+		InvalidStateTransition,
+		VersionConflict,
+	} {
+		t.Run(string(want), func(t *testing.T) {
+			err := NewError(want, "registry.test", "tool-search", nil)
 
-	if !errors.Is(err, AlreadyExists) {
-		t.Fatalf("errors.Is(%v, %v) = false, want true", err, AlreadyExists)
-	}
+			if !errors.Is(err, want) {
+				t.Fatalf("errors.Is(%v, %v) = false, want true", err, want)
+			}
 
-	kind, ok := KindOf(err)
-	if !ok {
-		t.Fatalf("KindOf(%v) ok = false, want true", err)
-	}
-	if kind != AlreadyExists {
-		t.Fatalf("KindOf(%v) = %q, want %q", err, kind, AlreadyExists)
+			kind, ok := KindOf(err)
+			if !ok {
+				t.Fatalf("KindOf(%v) ok = false, want true", err)
+			}
+			if kind != want {
+				t.Fatalf("KindOf(%v) = %q, want %q", err, kind, want)
+			}
+		})
 	}
 }
 
