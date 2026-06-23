@@ -67,5 +67,29 @@ make bootstrap-check
 
 ## M1 Focus
 
-M1 is limited to Tool Registry design and implementation planning. The task
-breakdown lives in `docs/06-m1-registry-tasks.md`.
+M1 is limited to the Tool Registry. The current Registry slice provides:
+
+- a `ToolSpec` model and validation rules under `internal/registry/spec`;
+- a Registry interface, lifecycle helpers, and error contract under
+  `internal/registry`;
+- a standard-library in-memory implementation under `internal/registry/memory`;
+- tests for registration, lookup, listing, update/version checks, deletion,
+  lifecycle transitions, validation, and error matching.
+
+The Registry remains an internal module. M1 does not include Gateway request
+handling, Runtime execution, Policy evaluation, Credential injection,
+Observability pipelines, protocol adapters, persistence, or a Web UI.
+
+See:
+
+- `docs/examples/registry-basic.md` for a minimal repository-local usage
+  example.
+- `docs/acceptance/m1-registry.md` for the M1 Registry acceptance checklist.
+- `docs/06-m1-registry-tasks.md` for the original M1 task breakdown.
+
+Run:
+
+```sh
+make m1-registry-check
+make verify
+```
